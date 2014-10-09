@@ -1,0 +1,430 @@
+---
+title: "Twitter Analyses"
+author: "Laura Wiley"
+date: "Wednesday, October 08, 2014"
+output: word_document
+---
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(cache=TRUE)
+library(knitr)
+```
+
+```{r, echo=FALSE,message=FALSE,warning=FALSE}
+## Get tweet data
+require(ggplot2)
+require(tm)
+require(lubridate)
+library(dplyr)
+library(stringr)
+library(reshape2)
+
+trim.whitespace<-function(x){gsub("^\\s+|\\s+$","",x)}
+cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+#setwd("Y:././Laura/AMIA_Twitter/")
+
+#################################
+## Load in Data and Format
+#################################
+
+symplur_amia2011_clean <- read.delim("symplur_amia2011_clean.txt", header=F, quote="")
+names(symplur_amia2011_clean)<-c("date","user","tweet")
+## Adjust Date/Time
+symplur_amia2011_clean$date<-trim.whitespace(symplur_amia2011_clean$date)
+symplur_amia2011_clean$date<-gsub("PDT ","",symplur_amia2011_clean$date)
+symplur_amia2011_clean$date<-as.POSIXlt(as.character(symplur_amia2011_clean$date), format="%a %b %d %H:%M:%S %Y",tz="America/Los_Angeles")
+symplur_amia2011_clean$date<-with_tz(symplur_amia2011_clean$date,tzone="America/New_York")
+# Add Year placeholder
+symplur_amia2011_clean$year<-rep("2011",nrow(symplur_amia2011_clean))
+
+symplur_amia2012_clean <- read.delim("symplur_amia2012_clean.txt", header=F, quote="")
+names(symplur_amia2012_clean)<-c("date","user","tweet")
+## Adjust Date/Time
+symplur_amia2012_clean$date<-trim.whitespace(symplur_amia2012_clean$date)
+symplur_amia2012_clean$date<-gsub("PDT ","",symplur_amia2012_clean$date)
+symplur_amia2012_clean$date<-as.POSIXlt(as.character(symplur_amia2012_clean$date), format="%a %b %d %H:%M:%S %Y",tz="America/Los_Angeles")
+symplur_amia2012_clean$date<-with_tz(symplur_amia2012_clean$date,tzone="America/Chicago")
+# Add Year placeholder
+symplur_amia2012_clean$year<-rep("2012",nrow(symplur_amia2012_clean))
+
+symplur_amia2013_clean <- read.delim("symplur_amia2013_clean.txt", header=F, quote="")
+names(symplur_amia2013_clean)<-c("user","tweet","date")
+# Reorder to be the same as 2011 and 2012
+symplur_amia2013_clean<-symplur_amia2013_clean[,c("date","user","tweet")]
+##Adjust Date/Time
+symplur_amia2013_clean$date<-trim.whitespace(symplur_amia2013_clean$date)
+symplur_amia2013_clean$date<-gsub("PST ","",symplur_amia2013_clean$date)
+symplur_amia2013_clean$date<-as.POSIXlt(as.character(symplur_amia2013_clean$date), format="%a %b %d %H:%M:%S %Y",tz="America/Los_Angeles")
+symplur_amia2013_clean$date<-with_tz(symplur_amia2013_clean$date,tzone="America/New_York")
+# Add Year Placeholder
+symplur_amia2013_clean$year<-rep("2013",nrow(symplur_amia2013_clean))
+
+amia_tweets<-rbind(symplur_amia2011_clean,symplur_amia2012_clean,symplur_amia2013_clean)
+amia_tweets$year<-as.factor(amia_tweets$year)
+amia_tweets$user<-as.factor(amia_tweets$user)
+amia_tweets$date<-as.POSIXct(amia_tweets$date)
+amia_tweets$tweetid<-c(1:nrow(amia_tweets))
+amia_tweets_df<-tbl_df(amia_tweets)
+```
+
+## Summary
+
+First to get us started, just a few summary statistics on the tweets.
+
+```{r,echo=FALSE,results='asis',message=FALSE,warning=FALSE}
+summary_stats<-amia_tweets_df %>% group_by(year) %>%  summarise(unique_users=length(unique(user)),unique_tweets=length(unique(tweet)))
+names(summary_stats)<-c("Year","Tweeter Count","Tweet Count")
+kable(summary_stats)
+```
+
+
+Based on the latest copy of the draft comments, one of the major opinion/conclusions of twitter was:
+
+>"Our analysis of Twitter data from the AMIA 2011-2013 Fall Symposia highlighted several different usage patterns for social media in a conference setting. Usage patterns included: sharing information with those who cannot attend the conference, enhancing the conference experience for those in attendance, and building professional relationships with other conference attendees and the wider biomedical informatics community."
+
+Given this thought I upgraded our analyses from simple hashtag output to a more meaningful syntactic analysis.
+
+
+##Content Types
+I thought it would be helpful to see how the content distribution (RT, MT, or new content) has changed as tweeting at conferences has become more common.
+
+The first thing I was interested in was how much original content was created compared to any type or RT or MT.  I have noticed an increased proportion of RTs each conference and I was curious to see if the data supported that trend.  I think this also has strong implications on reach of the message in each symposium. Each RT indicates a wider network exposed to that content. 
+
+```{r,echo=FALSE,results='asis',message=FALSE,warning=FALSE}
+# New Content Only
+amia_tweets_no_rmt<-amia_tweets_df %>% filter(!grepl('^RT |^rt | RT | rt |^MT |^mt | MT | mt ',tweet))
+amia_tweets_df<- amia_tweets_df %>% mutate(no_rmt=!grepl('^RT |^rt | RT | rt |^MT |^mt | MT | mt ',tweet))
+ggplot(amia_tweets_df,aes(x=year,fill=no_rmt))+geom_histogram(position="dodge")+scale_fill_manual(values=cbbPalette[2:4],name="",breaks=c("FALSE", "TRUE"),labels=c("RT's or MT's","New Content"))+theme(legend.position="bottom")+ggtitle("Original Content by Year")+xlab("Year")+ylab("Count")
+
+amia_tweets_tweet_original_only_table<-dcast(amia_tweets_df %>% group_by(year,no_rmt) %>% summarise(count=n()),year~no_rmt)
+names(amia_tweets_tweet_original_only_table)<-c("Year","RT's or MT's","New Content")
+kable(amia_tweets_tweet_original_only_table)
+```
+
+
+However, I also thought that RT/MTs are really different types of tweets. A pure RT (i.e., no additional commentary) is purely sharing, whereas MTs or RTs with content before the RT are conversation/commentary.  I also have noticed a large increase in RT frequency at recent meetings. I wanted to see if these impressions were supported by the data. 
+
+```{r,echo=FALSE,results='asis',message=FALSE,warning=FALSE}
+amia_tweets_rt_start<-amia_tweets_df %>% filter(grepl('^RT |^rt ',tweet))
+amia_tweets_df<- amia_tweets_df %>% mutate(rt_start=grepl('^RT |^rt ',tweet))
+ggplot(amia_tweets_df,aes(x=year,fill=rt_start))+geom_histogram(position="dodge")+scale_fill_manual(values=cbbPalette[2:4],name="",breaks=c("FALSE", "TRUE"),labels=c("New or Modified Content","Retweet Only"))+theme(legend.position="bottom")+ggtitle("Retweets by Year")+xlab("Year")+ylab("Count")
+
+amia_tweets_tweet_rt_only_table<-dcast(amia_tweets_df %>% group_by(year,rt_start) %>% summarise(count=n()),year~rt_start)
+names(amia_tweets_tweet_rt_only_table)<-c("Year","New or Modified Content","Retweet Only")
+kable(amia_tweets_tweet_rt_only_table)
+```
+
+
+
+To pull both of these ideas together, I created three classifications of tweet type:
+1. New Content
+2. RT or MTs with additional thoughts added
+3. Pure RT
+I plotted these by year as well to get a sense of how the distribution has changed over time.
+
+```{r,echo=FALSE,results='asis',message=FALSE,warning=FALSE}
+# By type
+amia_tweets_df<-amia_tweets_df %>% mutate(content_type=ifelse(no_rmt==TRUE,yes = "no_rmt",no = ifelse(rt_start==TRUE,yes = "rt_only",no = "modified_rmt")))
+amia_tweets_df$content_type<-factor(amia_tweets_df$content_type,levels=c("modified_rmt","rt_only","no_rmt"))
+ggplot(amia_tweets_df,aes(x=year,fill=content_type))+geom_histogram(position="dodge")+scale_fill_manual(values=cbbPalette[2:4],name="",breaks=c( "modified_rmt","rt_only","no_rmt"),labels=c("Modified Content","Retweeted Content","New Content"))+theme(legend.position="bottom")+ggtitle("Tweet Types by Year")+xlab("Year")+ylab("Count")
+
+amia_tweets_tweet_type_table<-dcast(amia_tweets_df %>% group_by(year,content_type) %>% summarise(count=n()),year~content_type)
+names(amia_tweets_tweet_type_table)<-c("Year","Modified Content","Retweeted Content","New Content")
+kable(amia_tweets_tweet_type_table)
+```
+
+
+##Discussions
+I think one of the best things about twitter are the conversations you get into during the conference. Although we don't have a way to measure the verbal conversations and connections that occur during/following the meeting. I thought there were some text approaches we could use to identify "discussions". I took all of the tweets identified as original content in the previous analysis and looked for @[:alphanum:] in the tweet body.  I counted each occurence in the tweet to get a sense of how large conversations could be. 
+
+Importantly, this analysis makes a number of assumptions. First, it is customary that if a speaker has a twitter account (and the tweeter knows their handle) the presenter is quoted using their handle. I would not really count these as conversations as the tweeter is usually not expecting a reply. I view this process a more of a stronger citation method to give credit to the presenter. Unfortunately without manual review I don't see us getting around this issue.  
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE,results='asis'}
+amia_tweets_discussion<-amia_tweets_df %>% filter(no_rmt==TRUE) %>% mutate(tweet=as.character(tweet)) %>% mutate(user_mention=grepl('@[0-9,a-z,A-Z,_]+ ',tweet),user_mention_count=str_count(string = tweet,pattern = '@[0-9,a-z,A-Z,_]+ |@[0-9,a-z,A-Z]+$')) %>% mutate(user_mention=factor(user_mention,levels=c(TRUE,FALSE)))
+ggplot(amia_tweets_discussion,aes(x=year,fill=user_mention))+geom_histogram(position="dodge")+scale_fill_manual(values=cbbPalette[2:4],name="",breaks=c("TRUE", "FALSE"),labels=c("Mentions 1+ User/s", "Does Not Mention Users"))+theme(legend.position="bottom")+ggtitle("New Content Only")
+
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE,results='asis'}
+amia_tweets_discussions_table<-dcast(amia_tweets_discussion %>% group_by(year,user_mention) %>% summarise(count=n()),year~user_mention)
+names(amia_tweets_discussions_table)<-c("Year","Mentions 1+ User/s","Does Not Mention Users")
+kable(amia_tweets_discussions_table)  
+```
+
+```{r,echo=FALSE,message=FALSE,warning=FALSE,results='asis'}
+
+amia_tweets_discussion<-amia_tweets_discussion %>% filter(user_mention==TRUE)
+amia_tweets_discussion$user_mention_count<-as.factor(amia_tweets_discussion$user_mention_count)
+amia_tweets_discussion_summary<-amia_tweets_discussion %>% group_by(year,user_mention_count) %>% summarise(count=n())
+amia_tweets_discussion_summary_1<-amia_tweets_discussion_summary %>% filter(year==2013,user_mention_count==1)
+amia_tweets_discussion_summary<-amia_tweets_discussion_summary[-15,]
+amia_tweets_discussion<-amia_tweets_discussion %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1020",ifelse(year==2012,"2012\nTotal Original Tweets = 3060","2013\nTotal Original Tweets = 3671")))
+amia_tweets_discussion_summary<-amia_tweets_discussion_summary  %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1020",ifelse(year==2012,"2012\nTotal Original Tweets = 3060","2013\nTotal Original Tweets = 3671")))
+amia_tweets_discussion_summary_1<-amia_tweets_discussion_summary_1 %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1020",ifelse(year==2012,"2012\nTotal Original Tweets = 3060","2013\nTotal Original Tweets = 3671")))  
+
+ggplot(amia_tweets_discussion,aes(x=user_mention_count))+geom_histogram(fill=cbbPalette[2])+geom_text(data=amia_tweets_discussion_summary,aes(x=user_mention_count,y=count,label=count,vjust=-0.5,colour=cbbPalette[2]))+geom_text(data=amia_tweets_discussion_summary_1,aes(x=user_mention_count,y=count,label=count,vjust=1.5))+facet_wrap(~label,scales = "fixed",ncol=1)+ggtitle("# Users Mentioned in Original Content by Year")+xlab("Number of Users Mentioned")+ylab("Count")+theme(legend.position="")
+
+#amia_tweets_discussion_mrt<-amia_tweets_df %>% filter(content_type=="modified_rmt") %>% mutate(tweet=as.character(tweet)) %>% mutate(pre_rt_content=str_split_fixed(tweet,pattern = " rt | RT | MT | mt |RT |MT ",n = 2)[,1]) %>% mutate(user_mention=grepl('@[0-9,a-z,A-Z]+ |@[0-9,a-z,A-Z]+$|@[0-9,a-z,A-Z]+_|@[0-9,a-z,A-Z]+:',pre_rt_content),user_mention_count=str_count(string = pre_rt_content,pattern = '@[0-9,a-z,A-Z]+ |@[0-9,a-z,A-Z]+$')) %>% mutate(user_mention=factor(user_mention,levels=c(TRUE,FALSE)))
+
+```
+
+##Weblinks
+
+The other great feature of twitter is the ability to add to the conference experience. Beyond the conversation aspect, a great asset of twitter is often getting links to new information providing immediate access to knowledge. It's a great way to share relevant papers, tools, examples, etc.
+
+Positively, almost every link that is tweeted is wrapped with a "t.co" link from twitter. This was originally implemented to give twitter more control over malicious links. I did a search for "t.co","html", or "www" as my definition of a link. Importantly, I removed true RTs from this analysis.
+
+```{r,echo=FALSE,results='asis',message=FALSE,warning=FALSE}
+amia_tweets_links<-amia_tweets_df %>% filter(rt_start==F) %>% mutate(tweet=as.character(tweet))  %>% mutate(weblink=grepl('http|www|t.co',tweet)) %>% mutate(weblink=factor(weblink,levels=c("TRUE","FALSE")))
+
+ggplot(amia_tweets_links,aes(x=year,fill=weblink))+geom_histogram(position="dodge")+scale_fill_manual(values=cbbPalette[2:4],name="",breaks=c("TRUE", "FALSE"),labels=c("Has Weblink","No Weblink"))+theme(legend.position="bottom")+ggtitle("Weblink Content by Year")+xlab("Year")+ylab("Count")
+
+amia_tweets_links_table<-dcast(amia_tweets_links %>% group_by(year,weblink) %>% summarise(count=n()),year~weblink)
+names(amia_tweets_links_table)<-c("Year","Contains Weblink","Does not Contain Weblink")
+kable(amia_tweets_links_table)  
+  
+```
+
+
+##Content Reach
+
+Finally I wanted to get a sense of the reach of #AMIA content. Unfortunately I can't get retrospective records of tweeter's followers at the time of each symposium. However I can use their current follower list to create a map representing the location of our tweeter's and their followers today.
+
+At the moment I am working around API limits to get this information for all of the tweeters. However to give you a taste of what this would like... As the example, red dots are tweeters and blue dots are their followers. The method to derive location is very coarse as twitter only returns what the user provides for location.  I have a script from http://biostat.jhsph.edu/~jleek/code/twitterMap.R that partiallly processes this data. However it needs to be fixed to handle more use cases.  
+
+**__If you think this would be valuable I can assist fixing the code__**
+
+```{r,echo=FALSE,eval=FALSE}
+# ## Extract Users Follow List
+#library(devtools)
+#install_github("geoffjentry/twitteR")
+library(twitteR)
+# 
+api_key<-"4v3FOM6h5rQkZ2aHJxaeQ"
+api_secret<-"PmkeWa0vq9WivE9vAZckQgjfzezRQwFDneVk7Fr07Q"
+access_token<-"388595556-reYoqpsVtYQxsWgNLP91XZsIY8pDkkip3CvTuFfx"
+access_token_secret<-"k98C0f3aFokl6ZXqmjUFFiOltJ3fjFLeDjSRQiKbp5fpW"
+
+setup_twitter_oauth(api_key,api_secret,access_token,access_token_secret)
+# 
+# ##Get Unique list of tweeters to pull
+tweeters<-amia_tweets_df %>% group_by(user) %>% summarise()
+tweeters<-data.frame(user=tweeters[-1,])
+
+split_tweeters<-split(tweeters,rep(1:15,each=75))
+
+##group1
+  user_list<-split_tweeters[[1]][]
+  group1<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group2
+  user_list<-split_tweeters[[2]][]
+  group2<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group3
+  user_list<-split_tweeters[[3]][]
+  group3<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group4
+  user_list<-split_tweeters[[4]][]
+  group4<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group5 
+  user_list<-split_tweeters[[5]][]
+  group5<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group6
+  user_list<-split_tweeters[[6]][]
+  group6<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group7
+  user_list<-split_tweeters[[7]][]
+  group7<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group8
+  user_list<-split_tweeters[[8]][]
+  group8<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group9
+  user_list<-split_tweeters[[9]][]
+  group9<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group10
+  user_list<-split_tweeters[[10]][]
+  group10<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group11
+  user_list<-split_tweeters[[11]][]
+  group11<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group12
+  user_list<-split_tweeters[[12]][]
+  group12<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group13
+  user_list<-split_tweeters[[13]][]
+  group13<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group14
+  user_list<-split_tweeters[[14]][]
+  group14<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+##group15
+  user_list<-split_tweeters[[15]][]
+  group15<-lookupUsers(as.character(user_list$user),includeNA=FALSE)
+  
+}
+
+group_list<-paste(paste("group",c(1:15),sep=""),collapse=",")
+all_groups<-list(group1,group2,group3,group4,group5,group6,group7,group8,group9,group10,group11,group12,group13,group14,group15)
+
+tweeter_list_locations<-NULL
+for(i in 1:length(all_groups)){
+  group<-all_groups[[i]]
+  
+  for(j in 1:length(group)){
+    tweeter <- group[[j]]$screenName
+    tweeter_location <- group[[j]]$location
+    
+    temp<-data.frame(tweeter=tweeter,location=tweeter_location)
+    tweeter_list_locations<-rbind(tweeter_list_locations,temp)
+  }
+}
+
+save(tweeter_list_locations,file = "tweeter_list_location.Rda")
+complete_follow_list<-NULL
+for(i in 1:length(all_groups)){
+  group<-all_groups[[i]]
+  
+  for(j in 1:length(group)){
+    username=group[[j]]$screenName
+    user_location<-group[[j]]$location
+    try({
+      followers<-group[[j]]$getFollowers()
+      followers_df<-twListToDF(followers)
+      followers_df$tweeter<-username
+      followers_df$user_location<-user_location
+      complete_follow_list<-rbind(complete_follow_list,followers_df)
+    })
+  }
+}
+
+
+complete_follow_list<-tbl_df(complete_follow_list)
+# 
+# for(i in 1:nrow(tweeters)){
+#   user<-getUser(as.character(tweeters[i,]))
+#   try({
+#     followers<-user$getFollowers()
+#     clean_followers<-twListToDF(followers)
+#     clean_followers$tweeter<-as.character(tweeters[i,])
+#     complete_followers_list<-rbind(complete_followers_list,clean_followers)
+#     })
+#   Sys.sleep(time = 90)
+# }
+# save(completed_followers_list,file="completed_followers_list.Rda")
+# 
+# save(complete_followers_list,file="complete_followers_list.Rda")
+```
+
+```{r,echo=FALSE,eval=FALSE}
+#load("complete_followers_list.Rda")
+
+map_users<-function(user_list,followers_list){
+  require("ggplot2")
+  
+  findLatLon <- function(user_location){
+    require("maps")
+    require("stringr")
+
+    # Load the geographic data
+    data(world.cities)
+    data(us.cities)
+    data(canada.cities)
+    
+    ## First remove thoses with missing data
+    user_location<-tbl_df(user_location) %>% filter(location!="")
+    
+    ## Then extract those with lat/lon already
+#    users_latlon<-user_location %>% filter(grepl("-*[0-9]+\\..-*[0-9]+",location)) %>% mutate(location=str_replace(location,"ÜT: ","")) %>% mutate(location=str_replace(location,"iPhone: ","")) %>% mutate(location=str_replace(location,"|Pre: ","")) %>% mutate(lat=str_split_fixed(location,",",n=2)[,1],lon=str_split_fixed(location,",",n=2)[,2])
+    
+    ## Take remaining individuals
+#    user_location<-user_location %>% filter(!grepl("-*[0-9]+\\..-*[0-9]+",location))
+    
+    ## Then look for those with commas
+#    user_location_long<-user_location %>% filter(grepl(",",location)) %>% mutate(first_part=str_split_fixed(location,",",n=2)[,1],second_part=str_split_fixed(location,",",n=2)[,2])
+    
+    
+    first_element<-tbl_df(data.frame(val=str_split_fixed(user_location$location,",",n = 2)[,1])) %>% filter(nchar(as.character(val))>0)
+      
+    
+    all_coord<-NULL
+    for(i in 1:nrow(first_element)){
+      val<-first_element[i,]
+      tmp = grep(val,world.cities[,1],fixed=TRUE)
+      tmp2 = grep(val,state.name,fixed=TRUE)
+      tmp3 = grep(val,world.cities[,2],fixed=TRUE)
+      
+      if(length(tmp) == 1){
+        coord<-data.frame(lat=world.cities[tmp,4],long=world.cities[tmp,5])
+        all_coord<-rbind(all_coord,coord)
+      }else if(length(tmp) > 1){
+        tmpCities = world.cities[tmp,]
+        coord = data.frame(lat=tmpCities[which.max(tmpCities$pop),4],long=tmpCities[which.max(tmpCities$pop),5])
+        all_coord<-rbind(all_coord,coord)
+      }else if(length(tmp2) == 1){
+        coord = data.frame(lat=state.center$y[tmp2],long=state.center$x[tmp2])
+        all_coord<-rbind(all_coord,coord)
+      }else if(length(tmp3) > 0){
+        tmpCities = world.cities[tmp3,]
+        coord = data.frame(lat=tmpCities[which.max(tmpCities$pop),4],long=tmpCities[which.max(tmpCities$pop),5])
+        all_coord<-rbind(all_coord,coord)
+      }
+    }
+    return(all_coord)
+  }
+  trim <- function (x) gsub("^\\s+|\\s+$", "", x)
+  
+  ## Get locations from users & followers
+  user_list<-tbl_df(user_list)
+  followers_list<-tbl_df(followers_list) 
+
+  user_list<-user_list %>% filter(nchar(location)>0,grepl(",",location)) %>% mutate(location=trim(location))  %>% group_by(location) %>% summarise()
+  user_location<-data.frame(lat=findLatLon(user_list$location)$lat,long=findLatLon(user_list$location)$long)
+  followers_list<-followers_list %>% filter(nchar(location)>0,grepl(",",location)) %>% mutate(location=trim(location)) %>% group_by(location) %>% summarise() 
+  followers_location<-data.frame(lat=findLatLon(followers_list$location)$lat,long=findLatLon(followers_list$location)$long)
+  
+  ## Plot the map
+  mp <- NULL
+  mapWorld <- borders("world", colour="gray50", fill="gray50") # create a layer of borders
+  mp <- ggplot() +   mapWorld
+  #Now Layer the cities on top
+  mp <- mp+ geom_point(data=followers_location,aes(x=long, y=lat) ,color="blue", size=3) 
+  mp <- mp + geom_point(data=user_location,aes(x=long,y=lat),color="red",size=3)
+  mp
+}
+
+#followers_list<-tbl_df(complete_followers_list) %>% group_by(screenName,location) %>% summarise()
+#user_list<-followers_list[1:10,]
+
+
+#map_users(user_list,complete_followers_list)
+#save(followers_location,file = "followers_location.Rda")
+load("followers_location.Rda")
+
+user_location<-tbl_df(followers_location) %>% sample_n(100)
+
+  mp <- NULL
+  mapWorld <- borders("world", colour="gray50", fill="gray50") # create a layer of borders
+  mp <- ggplot() +   mapWorld
+  #Now Layer the cities on top
+  mp <- mp+ geom_point(data=followers_location,aes(x=long, y=lat) ,color="blue", size=3) 
+  mp <- mp + geom_point(data=user_location,aes(x=long,y=lat),color="red",size=3)
+  mp
+```
+
+```{r,echo=FALSE}
+tweeters<-amia_tweets_df %>% group_by(user) %>% summarise()
+tweeters<-data.frame(user=tweeters[-1,])
+
+
+load("followers_location.Rda")
+load("tweeter_list_location.Rda")
+user_location<-tbl_df(followers_location) %>% sample_n(100)
+opts_chunk$set(fig.width = 8, fig.height = 5, dpi = 144)
+  mp <- NULL
+  mapWorld <- borders("world", colour="gray50", fill="gray50") # create a layer of borders
+  mp <- ggplot() +   mapWorld
+  #Now Layer the cities on top
+  mp <- mp+ geom_point(data=followers_location,aes(x=long, y=lat) ,color="blue", size=3) 
+  mp <- mp + geom_point(data=user_location,aes(x=long,y=lat),color="red",size=3)
+  mp
+```
+
+#Methods
+For the follower analysis I selected all unique tweeters between 2011-2013. I then queried twitter using the [twitteR](https://github.com/geoffjentry/twitteR) package. We had `r nrow(tweeters)` tweeters, but due to user's privacy settings we were only able to retrieve `r nrow(tweeter_list_locations)` twitter accounts. Of those a number of them will not allow for access to their follower list (count unknown at this point). Of these, a number will not have a location for which we can derive latitude and longitude.
