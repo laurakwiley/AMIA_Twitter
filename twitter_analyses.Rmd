@@ -17,6 +17,7 @@ require(lubridate)
 library(dplyr)
 library(stringr)
 library(reshape2)
+library(maps)
 
 trim.whitespace<-function(x){gsub("^\\s+|\\s+$","",x)}
 cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
@@ -27,7 +28,7 @@ cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2"
 #################################
 
 symplur_amia2011_clean <- read.delim("symplur_amia2011_clean.txt", header=F, quote="")
-names(symplur_amia2011_clean)<-c("date","user","tweet")
+names(symplur_amia2011_clean)<-c("user","tweet","date")
 ## Adjust Date/Time
 symplur_amia2011_clean$date<-trim.whitespace(symplur_amia2011_clean$date)
 symplur_amia2011_clean$date<-gsub("PDT ","",symplur_amia2011_clean$date)
@@ -37,7 +38,7 @@ symplur_amia2011_clean$date<-with_tz(symplur_amia2011_clean$date,tzone="America/
 symplur_amia2011_clean$year<-rep("2011",nrow(symplur_amia2011_clean))
 
 symplur_amia2012_clean <- read.delim("symplur_amia2012_clean.txt", header=F, quote="")
-names(symplur_amia2012_clean)<-c("date","user","tweet")
+names(symplur_amia2012_clean)<-c("user","tweet","date")
 ## Adjust Date/Time
 symplur_amia2012_clean$date<-trim.whitespace(symplur_amia2012_clean$date)
 symplur_amia2012_clean$date<-gsub("PDT ","",symplur_amia2012_clean$date)
@@ -48,8 +49,6 @@ symplur_amia2012_clean$year<-rep("2012",nrow(symplur_amia2012_clean))
 
 symplur_amia2013_clean <- read.delim("symplur_amia2013_clean.txt", header=F, quote="")
 names(symplur_amia2013_clean)<-c("user","tweet","date")
-# Reorder to be the same as 2011 and 2012
-symplur_amia2013_clean<-symplur_amia2013_clean[,c("date","user","tweet")]
 ##Adjust Date/Time
 symplur_amia2013_clean$date<-trim.whitespace(symplur_amia2013_clean$date)
 symplur_amia2013_clean$date<-gsub("PST ","",symplur_amia2013_clean$date)
@@ -58,7 +57,18 @@ symplur_amia2013_clean$date<-with_tz(symplur_amia2013_clean$date,tzone="America/
 # Add Year Placeholder
 symplur_amia2013_clean$year<-rep("2013",nrow(symplur_amia2013_clean))
 
-amia_tweets<-rbind(symplur_amia2011_clean,symplur_amia2012_clean,symplur_amia2013_clean)
+
+symplur_amia2014_clean <- read.delim("symplur_amia2014_clean.txt", header=F, quote="")
+names(symplur_amia2014_clean)<-c("user","tweet","date")
+##Adjust Date/Time
+symplur_amia2014_clean$date<-trim.whitespace(symplur_amia2014_clean$date)
+symplur_amia2014_clean$date<-gsub("PST ","",symplur_amia2014_clean$date)
+symplur_amia2014_clean$date<-as.POSIXlt(as.character(symplur_amia2014_clean$date), format="%a %b %d %H:%M:%S %Y",tz="America/Los_Angeles")
+symplur_amia2014_clean$date<-with_tz(symplur_amia2014_clean$date,tzone="America/New_York")
+# Add Year Placeholder
+symplur_amia2014_clean$year<-rep("2014",nrow(symplur_amia2014_clean))
+
+amia_tweets<-rbind(symplur_amia2011_clean,symplur_amia2012_clean,symplur_amia2013_clean,symplur_amia2014_clean)
 amia_tweets$year<-as.factor(amia_tweets$year)
 amia_tweets$user<-as.factor(amia_tweets$user)
 amia_tweets$date<-as.POSIXct(amia_tweets$date)
@@ -150,16 +160,17 @@ names(amia_tweets_discussions_table)<-c("Year","Mentions 1+ User/s","Does Not Me
 kable(amia_tweets_discussions_table)  
 ```
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE,results='asis'}
+```{r,echo=FALSE,message=FALSE,warning=FALSE,results='asis',fig.height=6.8,fig.width=5}
 
 amia_tweets_discussion<-amia_tweets_discussion %>% filter(user_mention==TRUE)
 amia_tweets_discussion$user_mention_count<-as.factor(amia_tweets_discussion$user_mention_count)
 amia_tweets_discussion_summary<-amia_tweets_discussion %>% group_by(year,user_mention_count) %>% summarise(count=n())
-amia_tweets_discussion_summary_1<-amia_tweets_discussion_summary %>% filter(year==2013,user_mention_count==1)
+amia_tweets_discussion_summary_1<-amia_tweets_discussion_summary %>% filter((year==2013 | year==2014),user_mention_count==1)
 amia_tweets_discussion_summary<-amia_tweets_discussion_summary[-15,]
-amia_tweets_discussion<-amia_tweets_discussion %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1020",ifelse(year==2012,"2012\nTotal Original Tweets = 3060","2013\nTotal Original Tweets = 3671")))
-amia_tweets_discussion_summary<-amia_tweets_discussion_summary  %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1020",ifelse(year==2012,"2012\nTotal Original Tweets = 3060","2013\nTotal Original Tweets = 3671")))
-amia_tweets_discussion_summary_1<-amia_tweets_discussion_summary_1 %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1020",ifelse(year==2012,"2012\nTotal Original Tweets = 3060","2013\nTotal Original Tweets = 3671")))  
+amia_tweets_discussion<-amia_tweets_discussion %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1036",ifelse(year==2012,"2012\nTotal Original Tweets = 3070",ifelse(year==2013,"2013\nTotal Original Tweets = 3675","2014\nTotal Original Tweets = 4600"))))
+amia_tweets_discussion_summary<-amia_tweets_discussion_summary  %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1036",ifelse(year==2012,"2012\nTotal Original Tweets = 3070",ifelse(year==2013,"2013\nTotal Original Tweets = 3675","2014\nTotal Original Tweets = 4600"))))
+amia_tweets_discussion_summary_1<-amia_tweets_discussion_summary_1 %>% mutate(label=ifelse(year==2011,"2011\nTotal Original Tweets = 1036",ifelse(year==2012,"2012\nTotal Original Tweets = 3070",ifelse(year==2013,"2013\nTotal Original Tweets = 3675","2014\nTotal Original Tweets = 4600"))))  
+
 
 ggplot(amia_tweets_discussion,aes(x=user_mention_count))+geom_histogram(fill=cbbPalette[2])+geom_text(data=amia_tweets_discussion_summary,aes(x=user_mention_count,y=count,label=count,vjust=-0.5,colour=cbbPalette[2]))+geom_text(data=amia_tweets_discussion_summary_1,aes(x=user_mention_count,y=count,label=count,vjust=1.5))+facet_wrap(~label,scales = "fixed",ncol=1)+ggtitle("# Users Mentioned in Original Content by Year")+xlab("Number of Users Mentioned")+ylab("Count")+theme(legend.position="")
 
