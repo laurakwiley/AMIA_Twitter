@@ -1,0 +1,4 @@
+api_key<-"z05yaDCux8wiaGFltYLHOoHLI"
+api_secret<-"wD0SXaVAmMb3zprXs5HEcwdKt4dYIT8dGwBw3tKsJtSItAVIQb"
+access_token<-"388595556-6cesMCw3nsnge9LfIoRLHeEJx5cNN2SdiYABMjpy"
+access_token_secret<-"TjNjvSQuVRU9xTVtocj7dzNwyuTXQr1AWiL3tqNLN2F1l"

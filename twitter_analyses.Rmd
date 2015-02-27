@@ -210,11 +210,8 @@ At the moment I am working around API limits to get this information for all of 
 #install_github("geoffjentry/twitteR")
 library(twitteR)
 # 
-api_key<-"4v3FOM6h5rQkZ2aHJxaeQ"
-api_secret<-"PmkeWa0vq9WivE9vAZckQgjfzezRQwFDneVk7Fr07Q"
-access_token<-"388595556-reYoqpsVtYQxsWgNLP91XZsIY8pDkkip3CvTuFfx"
-access_token_secret<-"k98C0f3aFokl6ZXqmjUFFiOltJ3fjFLeDjSRQiKbp5fpW"
 
+source(auth_creds.R)
 setup_twitter_oauth(api_key,api_secret,access_token,access_token_secret)
 # 
 # ##Get Unique list of tweeters to pull
