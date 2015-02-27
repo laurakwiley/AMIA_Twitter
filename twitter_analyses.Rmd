@@ -211,7 +211,7 @@ At the moment I am working around API limits to get this information for all of 
 library(twitteR)
 # 
 
-source(auth_creds.R)
+source("auth_creds.R")
 setup_twitter_oauth(api_key,api_secret,access_token,access_token_secret)
 # 
 # ##Get Unique list of tweeters to pull
